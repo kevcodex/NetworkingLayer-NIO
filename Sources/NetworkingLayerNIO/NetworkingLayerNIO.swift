@@ -35,6 +35,7 @@ public struct NetworkingLayerNIO: Networkable {
         switch request.requestType {
         case .requestData:
             return try await handleDataRequest(for: urlRequest,
+                                               acceptableStatusCodes: request.acceptableStatusCodes,
                                                callbackQueue: callbackQueue,
                                                progressHandler: progressHandler)
             
@@ -45,6 +46,7 @@ public struct NetworkingLayerNIO: Networkable {
         case .uploadMultipart(let body):
             return try await handleMulitpartRequest(for: urlRequest,
                                                     multipartBody: body,
+                                                    acceptableStatusCodes: request.acceptableStatusCodes,
                                                     callbackQueue: callbackQueue,
                                                     progressHandler: progressHandler)
         }
@@ -85,6 +87,7 @@ public struct NetworkingLayerNIO: Networkable {
     // MARK: - Handlers
     
     func handleDataRequest(for urlRequest: URLRequest,
+                           acceptableStatusCodes: [Int],
                            callbackQueue: DispatchQueue,
                            progressHandler: ProgressHandler?) async throws -> NetworkResponse {
         guard let url = urlRequest.url,
@@ -106,18 +109,27 @@ public struct NetworkingLayerNIO: Networkable {
         
         let httpResponse = try await client.execute(request: httpRequest).get()
         
+        let code = Int(httpResponse.status.code)
+        
         guard let body = httpResponse.body,
               let data = String(buffer: body).data(using: .utf8) else {
             throw GenericError(message: "Response Error")
         }
         
-        let response = NetworkResponse(statusCode: Int(httpResponse.status.code), data: data, request: urlRequest, httpResponse: nil)
+        let response = NetworkResponse(statusCode: code, data: data, request: urlRequest, httpResponse: nil)
+        
+        guard acceptableStatusCodes.contains(code) else {            
+            let error = GenericError(message: "Invalid Status Code")
+            
+            throw NetworkResponseError.responseError(error, response: response)
+        }
         
         return response
     }
     
     func handleMulitpartRequest(for urlRequest: URLRequest,
                                 multipartBody: [MultipartData],
+                                acceptableStatusCodes: [Int],
                                 callbackQueue: DispatchQueue,
                                 progressHandler: ProgressHandler?) async throws -> NetworkResponse {
         
@@ -133,6 +145,6 @@ public struct NetworkingLayerNIO: Networkable {
         urlRequest.setValue("multipart/form-data; boundary=\(mpData.boundary)", forHTTPHeaderField: "Content-Type")
         urlRequest.httpBody = finalData
         
-        return try await handleDataRequest(for: urlRequest, callbackQueue: callbackQueue, progressHandler: progressHandler)
+        return try await handleDataRequest(for: urlRequest, acceptableStatusCodes: acceptableStatusCodes, callbackQueue: callbackQueue, progressHandler: progressHandler)
     }
 }
