@@ -17,7 +17,12 @@ import NetworkingLayerCore
 
 public struct NetworkingLayerNIO: Networkable {
     
-    let client: HTTPClient
+    public let client: HTTPClient
+    
+    public init(client: HTTPClient) {
+        self.client = client
+    }
+    
     
     public func send<Request>(request: Request,
                               callbackQueue: DispatchQueue,
